@@ -5,6 +5,7 @@ use alloc::{string::String, vec::Vec};
 use alloy_sol_types::sol;
 use stylus_sdk::{
     alloy_primitives::{Address, U256},
+    call::transfer_eth,
     evm, msg,
     prelude::*,
 };
@@ -15,6 +16,7 @@ sol_storage! {
         uint256 bet_counter;
         mapping(uint256 => Bet) bets;
         mapping(uint256 => mapping(address => PlayerBet)) player_bets;
+        mapping(uint256 => address[]) bet_players;
     }
 
     pub struct Bet {
@@ -24,6 +26,7 @@ sol_storage! {
         uint256[] options;
         uint256 total_pool;
         bool resolved;
+        uint256 winning_option;
     }
 
     pub struct PlayerBet {
@@ -36,6 +39,8 @@ sol_storage! {
 sol! {
     event BetCreated(uint256 indexed bet_id, address indexed organizer, string event_name);
     event PlayerJoined(uint256 indexed bet_id, address indexed player, uint256 amount, uint256 option);
+    event BetResolved(uint256 indexed bet_id, uint256 winning_option);
+    event PrizeClaimed(uint256 indexed bet_id, address indexed winner, uint256 amount);
 }
 
 #[public]
@@ -110,12 +115,17 @@ impl BettingContract {
             return Err("Must send funds to bet".into());
         }
 
+        // Registrar la apuesta del jugador
         let mut bets_by_id = self.player_bets.setter(bet_id);
         let mut player_bet = bets_by_id.setter(msg::sender());
         player_bet.amount.set(amount);
         player_bet.option.set(option);
         player_bet.claimed.set(false);
 
+        // Agregar jugador a la lista de participantes
+        self.bet_players.setter(bet_id).push(msg::sender());
+
+        // Actualizar el pool total
         let current_total = bet.total_pool.get();
         let mut bet = self.bets.setter(bet_id);
         bet.total_pool.set(current_total + amount);
@@ -131,6 +141,114 @@ impl BettingContract {
         Ok(())
     }
 
+    pub fn resolve_bet(&mut self, bet_id: U256, winning_option: U256) -> Result<(), Vec<u8>> {
+        let bet = self.bets.getter(bet_id);
+
+        if bet.organizer.get() != msg::sender() {
+            return Err("Only organizer can resolve bet".into());
+        }
+
+        if bet.resolved.get() {
+            return Err("Bet already resolved".into());
+        }
+
+        let valid_option = {
+            let options = &bet.options;
+            let mut found = false;
+            for i in 0..options.len() {
+                if let Some(opt) = options.get(i) {
+                    if opt == winning_option {
+                        found = true;
+                        break;
+                    }
+                }
+            }
+            found
+        };
+
+        if !valid_option {
+            return Err("Invalid winning option".into());
+        }
+
+        let mut bet = self.bets.setter(bet_id);
+        bet.resolved.set(true);
+        bet.winning_option.set(winning_option);
+
+        let event = BetResolved {
+            bet_id,
+            winning_option,
+        };
+        evm::log(event);
+
+        Ok(())
+    }
+
+    pub fn claim_prize(&mut self, bet_id: U256) -> Result<(), Vec<u8>> {
+        let bet = self.bets.getter(bet_id);
+        if !bet.resolved.get() {
+            return Err("Bet not resolved yet".into());
+        }
+
+        let bets_by_id = self.player_bets.getter(bet_id);
+        let player_bet = bets_by_id.getter(msg::sender());
+
+        let amount = player_bet.amount.get();
+        if amount == U256::ZERO {
+            return Err("No bet found for player".into());
+        }
+
+        if player_bet.claimed.get() {
+            return Err("Prize already claimed".into());
+        }
+
+        if player_bet.option.get() != bet.winning_option.get() {
+            return Err("Player did not win".into());
+        }
+
+        let total_winning_pool = self.calculate_winning_pool(bet_id)?;
+        let prize = (amount * bet.total_pool.get()) / total_winning_pool;
+
+        let mut bets_by_id = self.player_bets.setter(bet_id);
+        let mut player_bet = bets_by_id.setter(msg::sender());
+        player_bet.claimed.set(true);
+
+        transfer_eth(msg::sender(), prize).map_err(|_| "Transfer failed")?;
+
+        let event = PrizeClaimed {
+            bet_id,
+            winner: msg::sender(),
+            amount: prize,
+        };
+        evm::log(event);
+
+        Ok(())
+    }
+
+    fn calculate_winning_pool(&self, bet_id: U256) -> Result<U256, Vec<u8>> {
+        let bet = self.bets.getter(bet_id);
+        let winning_option = bet.winning_option.get();
+        let players = &self.bet_players.getter(bet_id);
+
+        let mut total_winning_pool = U256::ZERO;
+
+        for i in 0..players.len() {
+            if let Some(player) = players.get(i) {
+                let bets_by_id = self.player_bets.getter(bet_id);
+                let player_bet = bets_by_id.getter(player);
+                if player_bet.option.get() == winning_option {
+                    total_winning_pool += player_bet.amount.get();
+                }
+            }
+        }
+
+        if total_winning_pool == U256::ZERO {
+            return Err("No winners found".into());
+        }
+
+        Ok(total_winning_pool)
+    }
+
+    // Getters para consultar el estado
     pub fn get_bet_organizer(&self, bet_id: U256) -> Address {
         self.bets.getter(bet_id).organizer.get()
     }
@@ -161,11 +279,33 @@ impl BettingContract {
         self.bets.getter(bet_id).resolved.get()
     }
 
+    pub fn get_bet_winning_option(&self, bet_id: U256) -> U256 {
+        self.bets.getter(bet_id).winning_option.get()
+    }
+
     pub fn get_player_bet_amount(&self, bet_id: U256, player: Address) -> U256 {
         self.player_bets.getter(bet_id).getter(player).amount.get()
     }
 
     pub fn get_player_bet_option(&self, bet_id: U256, player: Address) -> U256 {
         self.player_bets.getter(bet_id).getter(player).option.get()
+    }
+
+    pub fn get_player_bet_claimed(&self, bet_id: U256, player: Address) -> bool {
+        self.player_bets.getter(bet_id).getter(player).claimed.get()
+    }
+
+    pub fn get_bet_players(&self, bet_id: U256) -> Vec<Address> {
+        let players = &self.bet_players.getter(bet_id);
+        let len = players.len();
+        let mut result = Vec::with_capacity(len);
+
+        for i in 0..len {
+            if let Some(player) = players.get(i) {
+                result.push(player);
+            }
+        }
+
+        result
     }
 }
