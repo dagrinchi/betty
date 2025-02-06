@@ -73,6 +73,7 @@ impl BettingContract {
 
         bet.total_pool.set(U256::ZERO);
         bet.resolved.set(false);
+        bet.winning_option.set(U256::from(0));
 
         let event = BetCreated {
             bet_id,
