@@ -14,6 +14,7 @@ sol_storage! {
     pub struct BettingContract {
         uint256 bet_counter;
         mapping(uint256 => Bet) bets;
+        mapping(uint256 => mapping(address => PlayerBet)) player_bets;
     }
 
     pub struct Bet {
@@ -24,10 +25,17 @@ sol_storage! {
         uint256 total_pool;
         bool resolved;
     }
+
+    pub struct PlayerBet {
+        uint256 amount;
+        uint256 option;
+        bool claimed;
+    }
 }
 
 sol! {
     event BetCreated(uint256 indexed bet_id, address indexed organizer, string event_name);
+    event PlayerJoined(uint256 indexed bet_id, address indexed player, uint256 amount, uint256 option);
 }
 
 #[public]
@@ -72,6 +80,57 @@ impl BettingContract {
         Ok(bet_id)
     }
 
+    #[payable]
+    pub fn join_bet(&mut self, bet_id: U256, option: U256) -> Result<(), Vec<u8>> {
+        let bet = self.bets.getter(bet_id);
+        if bet.resolved.get() {
+            return Err("Bet is already resolved".into());
+        }
+
+        let valid_option = {
+            let options = &bet.options;
+            let mut found = false;
+            for i in 0..options.len() {
+                if let Some(opt) = options.get(i) {
+                    if opt == option {
+                        found = true;
+                        break;
+                    }
+                }
+            }
+            found
+        };
+
+        if !valid_option {
+            return Err("Invalid betting option".into());
+        }
+
+        let amount = msg::value();
+        if amount == U256::ZERO {
+            return Err("Must send funds to bet".into());
+        }
+
+        let mut bets_by_id = self.player_bets.setter(bet_id);
+        let mut player_bet = bets_by_id.setter(msg::sender());
+        player_bet.amount.set(amount);
+        player_bet.option.set(option);
+        player_bet.claimed.set(false);
+
+        let current_total = bet.total_pool.get();
+        let mut bet = self.bets.setter(bet_id);
+        bet.total_pool.set(current_total + amount);
+
+        let event = PlayerJoined {
+            bet_id,
+            player: msg::sender(),
+            amount,
+            option,
+        };
+        evm::log(event);
+
+        Ok(())
+    }
+
     pub fn get_bet_organizer(&self, bet_id: U256) -> Address {
         self.bets.getter(bet_id).organizer.get()
     }
@@ -100,5 +159,13 @@ impl BettingContract {
 
     pub fn get_bet_resolved(&self, bet_id: U256) -> bool {
         self.bets.getter(bet_id).resolved.get()
+    }
+
+    pub fn get_player_bet_amount(&self, bet_id: U256, player: Address) -> U256 {
+        self.player_bets.getter(bet_id).getter(player).amount.get()
+    }
+
+    pub fn get_player_bet_option(&self, bet_id: U256, player: Address) -> U256 {
+        self.player_bets.getter(bet_id).getter(player).option.get()
     }
 }
