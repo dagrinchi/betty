@@ -49,7 +49,6 @@ impl BettingContract {
         self.bet_counter.get()
     }
 
-    #[payable]
     pub fn create_bet(
         &mut self,
         event_name: String,
@@ -60,7 +59,7 @@ impl BettingContract {
             return Err("Must provide betting options".into());
         }
 
-        let bet_id = self.bet_counter.get() + U256::from(1);
+        let bet_id = self.bet_counter.get().saturating_add(U256::from(1));
         self.bet_counter.set(bet_id);
 
         let mut bet = self.bets.setter(bet_id);
@@ -206,13 +205,19 @@ impl BettingContract {
         }
 
         let total_winning_pool = self.calculate_winning_pool(bet_id)?;
-        let prize = (amount * bet.total_pool.get()) / total_winning_pool;
+        let prize = amount
+            .checked_mul(bet.total_pool.get())
+            .unwrap_or(U256::ZERO)
+            .checked_div(total_winning_pool)
+            .unwrap_or(U256::ZERO);
 
         let mut bets_by_id = self.player_bets.setter(bet_id);
         let mut player_bet = bets_by_id.setter(msg::sender());
-        player_bet.claimed.set(true);
 
-        transfer_eth(msg::sender(), prize).map_err(|_| "Transfer failed")?;
+        if transfer_eth(msg::sender(), prize).is_err() {
+            return Err("Transfer failed".into());
+        }
+        player_bet.claimed.set(true);
 
         let event = PrizeClaimed {
             bet_id,
