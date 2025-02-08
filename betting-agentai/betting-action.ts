@@ -21,6 +21,11 @@ const joinBetSchema = z.object({
   amount: z.string()
 });
 
+const resolveBetSchema = z.object({
+  betId: z.number(),
+  winningOption: z.number()
+});
+
 class BettingActionProvider extends ActionProvider {
   constructor() {
     super("betting", []);
@@ -158,6 +163,34 @@ ${resolved ? `- 🏆 **Winner option:** ${winningOption}` : ''}
       return `Joined bet ${args.betId} with option ${args.option}. Transaction hash: ${hash}`;
     } catch (error) {
       return `Error joining bet: ${error}`;
+    }
+  }
+
+  @CreateAction({
+    name: "resolve_bet",
+    description: `
+    Resolves a bet by setting the winning option.
+    Takes the following inputs:
+    - betId: ID of the bet to resolve
+    - winningOption: The winning option number
+    `,
+    schema: resolveBetSchema,
+  })
+  async resolveBet(walletProvider: EvmWalletProvider, args: z.infer<typeof resolveBetSchema>) {
+    try {
+      const hash = await walletProvider.sendTransaction({
+        to: process.env.BETTING_CONTRACT_ADDRESS as `0x${string}`,
+        data: encodeFunctionData({
+          abi,
+          functionName: "resolveBet",
+          args: [BigInt(args.betId), BigInt(args.winningOption)],
+        }),
+      });
+
+      await walletProvider.waitForTransactionReceipt(hash);
+      return `Resolved bet ${args.betId} with winning option ${args.winningOption}. Transaction hash: ${hash}`;
+    } catch (error) {
+      return `Error resolving bet: ${error}`;
     }
   }
 }
