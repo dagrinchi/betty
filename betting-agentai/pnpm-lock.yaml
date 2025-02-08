@@ -29,6 +29,9 @@ importers:
       dotenv:
         specifier: ^16.4.5
         version: 16.4.7
+      ethers:
+        specifier: ^6.13.5
+        version: 6.13.5
       zod:
         specifier: ^3.22.4
         version: 3.24.1
@@ -1042,7 +1045,7 @@ snapshots:
 
   '@types/node-fetch@2.6.12':
     dependencies:
-      '@types/node': 18.19.75
+      '@types/node': 22.7.5
       form-data: 4.0.1
 
   '@types/node@18.19.75':
