@@ -1,3 +1,10 @@
-import { customActionProvider } from "@coinbase/agentkit";
+import { ActionProvider } from "@coinbase/agentkit";
 
-export const bettingActionProvider = customActionProvider([]);
+class BettingActionProvider extends ActionProvider {
+  constructor() {
+    super("betting", []);
+  }
+  supportsNetwork = (_: any) => true;
+}
+
+export const bettingActionProvider = () => new BettingActionProvider();
