@@ -16,13 +16,21 @@ import { ChatOpenAI } from "@langchain/openai";
 import * as dotenv from "dotenv";
 import * as fs from "fs";
 import { Client, GatewayIntentBits, Events, Message, TextChannel } from 'discord.js';
+import { bettingActionProvider } from "./betting-action";
 
 dotenv.config();
 
 function validateEnvironment(): void {
   const missingVars: string[] = [];
 
-  const requiredVars = ["OPENAI_API_KEY", "CDP_API_KEY_NAME", "CDP_API_KEY_PRIVATE_KEY", "DISCORD_TOKEN", "DISCORD_CHANNEL_ID"];
+  const requiredVars = [
+    "OPENAI_API_KEY",
+    "CDP_API_KEY_NAME",
+    "CDP_API_KEY_PRIVATE_KEY",
+    "DISCORD_TOKEN",
+    "DISCORD_CHANNEL_ID",
+    "BETTING_CONTRACT_ADDRESS",
+  ];
   requiredVars.forEach(varName => {
     if (!process.env[varName]) {
       missingVars.push(varName);
@@ -86,6 +94,7 @@ async function initializeAgent() {
           apiKeyName: process.env.CDP_API_KEY_NAME,
           apiKeyPrivateKey: process.env.CDP_API_KEY_PRIVATE_KEY?.replace(/\\n/g, "\n"),
         }),
+        bettingActionProvider
       ],
     });
 
