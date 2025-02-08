@@ -15,8 +15,7 @@ import { createReactAgent } from "@langchain/langgraph/prebuilt";
 import { ChatOpenAI } from "@langchain/openai";
 import * as dotenv from "dotenv";
 import * as fs from "fs";
-import * as readline from "readline";
-import { Client, GatewayIntentBits, Events, Message } from 'discord.js';
+import { Client, GatewayIntentBits, Events, Message, TextChannel } from 'discord.js';
 
 dotenv.config();
 
@@ -124,7 +123,37 @@ async function initializeAgent() {
   }
 }
 
+async function handleDiscordMessage(message: Message, agent: any, config: any) {
+  try {
+    if (message.author.bot) return;
+    if (message.channelId !== process.env.DISCORD_CHANNEL_ID) return;
 
+    if (message.channel instanceof TextChannel) {
+      await message.channel.sendTyping();
+    }
+    const stream = await agent.stream({ messages: [new HumanMessage(message.content)] }, config);
+
+    let responseContent = '';
+    for await (const chunk of stream) {
+      if ("agent" in chunk) {
+        responseContent += chunk.agent.messages[0].content + '\n';
+      } else if ("tools" in chunk) {
+        responseContent += chunk.tools.messages[0].content + '\n';
+      }
+    }
+
+    const MAX_MESSAGE_LENGTH = 2000;
+    while (responseContent.length > 0) {
+      const chunk = responseContent.slice(0, MAX_MESSAGE_LENGTH);
+      await message.reply(chunk);
+      responseContent = responseContent.slice(MAX_MESSAGE_LENGTH);
+    }
+
+  } catch (error) {
+    console.error('Error handling message:', error);
+    await message.reply('Lo siento, hubo un error procesando tu solicitud. Por favor, intenta de nuevo más tarde.');
+  }
+}
 
 async function main() {
   try {
@@ -143,7 +172,7 @@ async function main() {
     });
 
     client.on(Events.MessageCreate, async (message) => {
-      // TODO: handle discord message
+      await handleDiscordMessage(message, agent, config);
     });
 
     await client.login(process.env.DISCORD_TOKEN);
