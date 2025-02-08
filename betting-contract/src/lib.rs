@@ -254,7 +254,10 @@ impl BettingContract {
         Ok(total_winning_pool)
     }
 
-    // Getters para consultar el estado
+    pub fn get_bet_event_name(&self, bet_id: U256) -> String {
+        self.bets.getter(bet_id).event_name.get_string()
+    }
+
     pub fn get_bet_organizer(&self, bet_id: U256) -> Address {
         self.bets.getter(bet_id).organizer.get()
     }
