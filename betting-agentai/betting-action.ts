@@ -15,6 +15,12 @@ const betQuerySchema = z.object({
   betId: z.number()
 });
 
+const joinBetSchema = z.object({
+  betId: z.number(),
+  option: z.number(),
+  amount: z.string()
+});
+
 class BettingActionProvider extends ActionProvider {
   constructor() {
     super("betting", []);
@@ -61,7 +67,13 @@ class BettingActionProvider extends ActionProvider {
   })
   async getBetDetails(walletProvider: EvmWalletProvider, args: z.infer<typeof betQuerySchema>) {
     try {
-      const [deadline, options, organizer, totalPool, resolved, winningOption] = await Promise.all([
+      const [eventName, deadline, options, organizer, totalPool, resolved, winningOption] = await Promise.all([
+        walletProvider.readContract({
+          address: process.env.BETTING_CONTRACT_ADDRESS as `0x${string}`,
+          abi,
+          functionName: "getBetEventName",
+          args: [BigInt(args.betId)],
+        }),
         walletProvider.readContract({
           address: process.env.BETTING_CONTRACT_ADDRESS as `0x${string}`,
           abi,
@@ -104,8 +116,9 @@ class BettingActionProvider extends ActionProvider {
       const totalPoolETH = Number(totalPool) / 1e18;
 
       return `
-📌 **Bet details**  
+**Bet details**  
 
+- 📌 **Event name:** ${eventName}
 - ⏳ **Deadline:** ${deadlineDate}  
 - 🎯 **Options:** ${Array(options).join(', ')}  
 - 👤 **Organizer Wallet:** ${organizer}  
@@ -115,6 +128,36 @@ ${resolved ? `- 🏆 **Winner option:** ${winningOption}` : ''}
   `;
     } catch (error) {
       return `Error getting bet details: ${error}`;
+    }
+  }
+
+  @CreateAction({
+    name: "join_bet",
+    description: `
+    Joins an existing bet with the specified option and amount.
+    Takes the following inputs:
+    - betId: ID of the bet to join
+    - option: Your chosen option number
+    - amount: Amount of ETH to bet
+    `,
+    schema: joinBetSchema,
+  })
+  async joinBet(walletProvider: EvmWalletProvider, args: z.infer<typeof joinBetSchema>) {
+    try {
+      const hash = await walletProvider.sendTransaction({
+        to: process.env.BETTING_CONTRACT_ADDRESS as `0x${string}`,
+        value: BigInt(args.amount),
+        data: encodeFunctionData({
+          abi,
+          functionName: "joinBet",
+          args: [BigInt(args.betId), BigInt(args.option)],
+        }),
+      });
+
+      await walletProvider.waitForTransactionReceipt(hash);
+      return `Joined bet ${args.betId} with option ${args.option}. Transaction hash: ${hash}`;
+    } catch (error) {
+      return `Error joining bet: ${error}`;
     }
   }
 }
