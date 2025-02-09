@@ -18,8 +18,10 @@
     "@langchain/core": "^0.3.19",
     "@langchain/langgraph": "^0.2.21",
     "@langchain/openai": "^0.3.14",
+    "@types/express": "^5.0.0",
     "discord.js": "^14.17.3",
     "dotenv": "^16.4.5",
+    "express": "^4.21.2",
     "viem": "^2.22.23",
     "zod": "^3.22.4"
   },
