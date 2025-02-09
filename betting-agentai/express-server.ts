@@ -12,11 +12,43 @@ interface AgentConfig {
   };
 }
 
+interface SuccessResponse {
+  status: 'success';
+  response: string;
+  timestamp: string;
+}
+
+interface ErrorResponse {
+  status: 'error';
+  error: string;
+  code: number;
+  timestamp: string;
+}
+
 interface Agent {
   stream: (
     params: { messages: HumanMessage[] },
     config: AgentConfig
   ) => Promise<IterableReadableStream<any>>;
+}
+
+type ApiResponse = SuccessResponse | ErrorResponse;
+
+function createSuccessResponse(content: string): SuccessResponse {
+  return {
+    status: 'success',
+    response: content,
+    timestamp: new Date().toISOString()
+  };
+}
+
+function createErrorResponse(message: string, code: number): ErrorResponse {
+  return {
+    status: 'error',
+    error: message,
+    code,
+    timestamp: new Date().toISOString()
+  };
 }
 
 export async function setupExpressServer(
@@ -56,15 +88,16 @@ export async function setupExpressServer(
         }
       }
 
-      res.json({
-        response: responseContent.trim()
-      });
+      const successResponse = createSuccessResponse(responseContent.trim());
+      res.json(successResponse);
 
     } catch (error) {
       console.error('Error procesando la petición:', error);
-      res.status(500).json({
-        error: 'Error interno del servidor'
-      });
+      const errorResponse = createErrorResponse(
+        'Error interno del servidor',
+        500
+      );
+      res.status(500).json(errorResponse);
     }
   };
 
