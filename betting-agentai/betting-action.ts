@@ -193,6 +193,41 @@ ${resolved ? `- 🏆 **Winner option:** ${winningOption}` : ''}
       return `Error resolving bet: ${error}`;
     }
   }
+
+  @CreateAction({
+    name: "claim_prize",
+    description: `
+      Claims the prize for a winning bet.
+      Takes the following input:
+      - betId: ID of the bet to claim prize from
+    `,
+    schema: betQuerySchema,
+  })
+  async claimPrize(walletProvider: EvmWalletProvider, args: z.infer<typeof betQuerySchema>) {
+    try {
+      const hash = await walletProvider.sendTransaction({
+        to: process.env.BETTING_CONTRACT_ADDRESS as `0x${string}`,
+        data: encodeFunctionData({
+          abi,
+          functionName: "claimPrize",
+          args: [BigInt(args.betId)],
+        }),
+      });
+
+      await walletProvider.waitForTransactionReceipt(hash);
+
+      return `
+  💰 **Prize claim successful!**
+  
+  - 📝 Transaction hash: ${hash}
+  - ✅ Status: Confirmed
+  
+  Transaction successfully submitted!
+      `;
+    } catch (error) {
+      return `Error claiming prize: ${error}`;
+    }
+  }
 }
 
 export const bettingActionProvider = () => new BettingActionProvider();
