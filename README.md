@@ -1,4 +1,4 @@
-# Betty - AI Sports Betting Agent
+# <img src="logo_betty.png" width="40" style="vertical-align: middle"> Betty - AI Sports Betting Agent
 
 [![Docker Pulls](https://img.shields.io/docker/pulls/dagrinchi/betting-agentai)](https://hub.docker.com/r/dagrinchi/betting-agentai)
 [![Docker Image Version](https://img.shields.io/docker/v/dagrinchi/betting-agentai/latest)](https://hub.docker.com/r/dagrinchi/betting-agentai/tags)
