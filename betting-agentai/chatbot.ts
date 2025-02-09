@@ -14,6 +14,7 @@ import * as dotenv from "dotenv";
 import { Client, GatewayIntentBits, Events, Message, TextChannel } from 'discord.js';
 import { bettingActionProvider } from "./betting-action";
 import { ArbitrumWalletProvider } from "./arbitrumWalletProvider";
+import { setupExpressServer } from "./express-server";
 
 dotenv.config();
 
@@ -141,6 +142,8 @@ async function handleDiscordMessage(message: Message, agent: any, config: any) {
 async function main() {
   try {
     const { agent, config } = await initializeAgent();
+
+    await setupExpressServer(agent, config);
 
     const client = new Client({
       intents: [
